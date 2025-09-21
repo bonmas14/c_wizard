@@ -7,45 +7,66 @@
 
 // AudioStream audio_stream;
 
-Lpc_Encoder_Settings lpc_settings;
+typedef enum {
+    STATUS_IDLE,
+    STATUS_CONVERTING,
+} Program_Status;
+
+typedef struct {
+    Program_Status status;
+    u64            index;
+    FilePathList   path_list;
+    Lpc_Encoder_Settings settings;
+} Program_State;
+
+Program_State state;
 
 void program_init(void) {
-    // SetAudioStreamBufferSizeDefault(MAX_SAMPLES_UPDATE);
-    //
-    // audio_stream = LoadAudioStream(SAMPLE_RATE, 32, 1);
-    //
-    // if (IsAudioStreamValid(audio_stream)) {
-    //     PlayAudioStream(audio_stream);
-    //     SetAudioStreamVolume(audio_stream, 1.0f);
-    // }
-
-    lpc_settings = LPC_DEFAULT_SETTINGS; 
+    state.status = STATUS_IDLE;
+    state.settings = LPC_DEFAULT_SETTINGS; 
 }
 
 void program_deinit(void) {
-    // if (IsAudioStreamValid(audio_stream)) {
-    //     StopAudioStream(audio_stream);
-    //     UnloadAudioStream(audio_stream);
-    // }
 }
 
-s64 mouse_coord, mouse_power, index;
-
 void program_update(void) {
-    FilePathList paths;
-    Lpc_Sample_Buffer samples;
-    Lpc_TMS5220_Buffer buffer;
-    Lpc_Codes codes;
-    Wave wave;
-    u64 i;
+    switch (state.status) {
+        case STATUS_IDLE:
+        {
+            if (IsFileDropped()) {
+                if (state.path_list.paths != NULL) {
+                    UnloadDroppedFiles(state.path_list);
+                    memset(&state.path_list, 0, sizeof(FilePathList));
+                }
 
-    if (IsFileDropped()) {
-        paths = LoadDroppedFiles();
+                state.path_list = LoadDroppedFiles();
 
-        // @todo, load all files and then store them at work dir
-        for (i = 0; i < paths.count; i++) {
-            wave = LoadWave(paths.paths[i]);
-            if (!IsWaveValid(wave)) continue;
+                state.status = STATUS_CONVERTING;
+            }
+        } break;
+
+        case STATUS_CONVERTING:
+        {
+            Lpc_Sample_Buffer samples;
+            Lpc_TMS5220_Buffer buffer;
+            Lpc_Codes codes;
+            Wave wave;
+            const char *file_name;
+
+            if (state.index >= state.path_list.count) {
+                state.status = STATUS_IDLE;
+                state.index  = 0;
+                break;
+            }
+
+            wave      = LoadWave(state.path_list.paths[state.index]);
+            file_name = GetFileNameWithoutExt(state.path_list.paths[state.index]);
+
+            state.index++;
+
+            if (!IsWaveValid(wave)) { 
+                break;
+            }
 
             WaveFormat(&wave, LPC_SAMPLE_RATE, 32, 1);
 
@@ -54,7 +75,7 @@ void program_update(void) {
             samples.frame_count = wave.frameCount;
             samples.samples     = (f32*)wave.data;
 
-            codes  = lpc_encode(samples, lpc_settings);
+            codes  = lpc_encode(samples, state.settings);
             buffer = lpc_tms5220_encode(codes);
 
             UnloadWave(wave);
@@ -67,31 +88,22 @@ void program_update(void) {
             wave.frameCount = samples.frame_count;
             wave.data       = (void*)samples.samples;
 
-            ExportWave(wave, TextFormat("lpc10_%s.wav", GetFileNameWithoutExt(paths.paths[i])));
-            ExportDataAsCode(buffer.bytes, buffer.count, TextFormat("lpc10_%s.h", GetFileNameWithoutExt(paths.paths[i])));
+            ExportWave(wave, TextFormat("lpc10_%s.wav", file_name));
+            ExportDataAsCode(buffer.bytes, buffer.count, TextFormat("lpc10_%s.h", file_name));
 
             lpc_codes_free(&codes);
             lpc_buffer_free(&samples);
             lpc_tms5220_buffer_free(&buffer);
-        }
-    
-        UnloadDroppedFiles(paths);
+        } break;
     }
-
-    // if (IsAudioStreamProcessed(audio_stream)) {
-    //     UpdateAudioStream(audio_stream,
-    //             audio_buffer_read(),
-    //             MAX_SAMPLES_UPDATE);
-    //     time_pos = time;
-    // } else {
-    //     time_pos += GetFrameTime() * SAMPLE_RATE;
-    // }
 }
 
 void program_render(void) {
     Font font;
     Vector2 pos, size;
-    char *text;
+    const char *text;
+    u64 i;
+
     BeginDrawing();
     ClearBackground(CLITERAL(Color) {0x1c, 0x1c, 0x1c, 0xff});
 
@@ -104,6 +116,18 @@ void program_render(void) {
     pos.y = window_height / 2 - size.y / 2;
 
     DrawTextEx(font, text, pos, 24, 1, WHITE);
+
+    for (i = 0; i < state.path_list.count; i++) {
+        text = GetFileNameWithoutExt(state.path_list.paths[i]);
+
+        text = TextFormat("[%s] %s", i < state.index ? "DONE" : "----", text);
+        size = MeasureTextEx(font, text, 24, 1);
+
+        pos.x = size.y;
+        pos.y = size.y * (i + 1);
+
+        DrawTextEx(font, text, pos, 24, 1, WHITE);
+    }
 
     EndDrawing();
 }
