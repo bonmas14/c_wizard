@@ -1,12 +1,30 @@
 /*
     LPC10 - simple audio encoder/decoder for tms5220.
 
-    Language version C89/C99.
+    Language version C89/C99. (compiles as -std=c89 with gcc)
     standard math library.
 
-    define LPC_ENC_DEC_IMPLEMENTATION before including file to include implementation code.
+    USAGE:
 
-    define LPC_STATIC_DECL to make all declarations static.
+    In exactly one translation unit define LPC_ENC_DEC_IMPLEMENTATION
+    before including this library:
+
+    ```c
+
+    #define LPC_ENC_DEC_IMPLEMENTATION
+    #include "lpc10_enc_dec.h" 
+
+    ```
+
+    DEFINES:
+    
+    LPC_ENC_DEC_IMPLEMENTATION (required once) - will include implementation
+    LPC_STATIC_DECL            (optional)      - makes all declarations static.
+    NDEBUG                     (optional)      - will define internal asserts as (void)(expr).
+
+    assert(expr)    - redefine to bypass standard assertion mechanism, it also bypases including stdio.h.
+    LPC_ALLOC(size) - redefine to change allocation strategies (also need to redefine LPC_FREE).
+    LPC_FREE(ptr)   - same as LPC_ALLOC.
 
 
     LICENSE:
@@ -33,6 +51,7 @@
 
     CHANGELOG:
     v1.0 Init version.
+    v1.1 Adding LPC_UNUSED and LPC_INLINE macro as I forget to add it, preprocessor typos and coments style.
 */
 
 #if !defined(LPC_ENC_DEC_H)
@@ -42,15 +61,17 @@
 #define LPC_API static
 #else
 #define LPC_API 
-#endif // LPC_STATIC_DECL
+#endif /* LPC_STATIC_DECL */
 
 #if !defined(CLITERAL)
 #if defined(__cplusplus)
 #define CLITERAL(type) type
 #else
 #define CLITERAL(type) (type)
-#endif // __cplusplus
-#endif // CLITERAL
+#endif /* __cplusplus */
+#endif /* CLITERAL    */
+
+#define LPC_UNUSED(x) (void)(x)
 
 #include <stddef.h>
 #include <stdint.h>
@@ -81,30 +102,45 @@ extern "C" {
 #else
 #if !defined(LPC_FREE)
 #error "LPC_ALLOC was redefined but not LPC_FREE"
-#endif // LPC_FREE
-#endif // LPC_ALLOC
+#endif /* LPC_FREE  */
+#endif /* LPC_ALLOC */
 
 #if !defined(LPC_FREE)
 #define LPC_FREE(ptr)   free(ptr)
 #else
-#if !defined(LPC_FREE)
+#if !defined(LPC_ALLOC)
 #error "LPC_FREE was redefined but not LPC_ALLOC"
-#endif // LPC_ALLOC
-#endif // LPC_FREE
+#endif /* LPC_ALLOC */
+#endif /* LPC_FREE */
+
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
+#define LPC_INLINE inline
+#elif defined(__GNUC__) || defined(__clang__)
+#define LPC_INLINE __inline__
+#elif defined(_MSC_VER)
+#define LPC_INLINE __inline
+#else
+#define LPC_INLINE
+#endif
+
 
 #if !defined(assert)
+#if !defined(NDEBUG)
 #include <stdio.h>
 
-#define assert(expr) if ((expr) == 0) {\
+#define assert(expr) if ((int)(expr) == 0) {\
     fprintf(stderr, "Assert at %s:%d failed!", __FILE__, __LINE__); \
     *((int *)0) = 0; \
 }
 
-#endif
+#else
+#define assert(expr) (void)(expr)
+#endif /* NDEBUG */
+#endif /* assert */
 
-// 
+/*
 // Type declarations
-//
+*/
 
 typedef uint64_t lpc_u64;
 typedef uint32_t lpc_u32;
@@ -127,14 +163,17 @@ typedef lpc_u8 lpc_u5;
 typedef lpc_u8 lpc_u6;
 typedef lpc_u8 lpc_u7;
 
+/*
 // Intermediate representation of tms5220 code,
 // just before converting it into bit stream
 // @todo, skip this step?
+*/
+
 typedef lpc_u64 lpc_bitcode;
 
 typedef struct {
-    lpc_f32 pitch_low_cut, pitch_high_cut, pitch_q_factor;                // filter settings that will be applied on pitch recognition
-    lpc_f32 processing_low_cut, processing_high_cut, processing_q_factor; // filter settings that will be applied on calculating K parameters
+    lpc_f32 pitch_low_cut, pitch_high_cut, pitch_q_factor;                /* filter settings that will be applied on pitch recognition        */
+    lpc_f32 processing_low_cut, processing_high_cut, processing_q_factor; /* filter settings that will be applied on calculating K parameters */
 
     lpc_f32 unvoiced_thresh;
     lpc_f32 unvoiced_rms_multiply;
@@ -153,9 +192,9 @@ typedef struct {
     25, 2                  \
 }
 
-// 
+/* 
 // @todo, fixed version
-//
+*/
 typedef struct {
     lpc_u32 sample_rate;
     lpc_u32 channels;
@@ -177,14 +216,15 @@ typedef struct {
 
         lpc_u8 k[10];
     };
-
 } Lpc_Code;
 
 typedef struct {
     lpc_u32 count;
+    /*
     // @note: I use offsets from buffer start instead of pointers because
     // it allows me to use multiple buffers with same segment info.
     // So the info is shared.                       @bonmas
+    */
     lpc_u32 buffer_offset;
 
     lpc_u32 table_energy;
@@ -234,11 +274,11 @@ typedef struct {
     void *data;
 } Lpc_List;
 
-//
+/*
 // API
-//
+*/
 
-// Helper function to make sure, codes are correct
+/* Helper function to make sure, codes are correct */
 LPC_API Lpc_Code           lpc_code_clamp(Lpc_Code code);
 
 LPC_API Lpc_Codes          lpc_encode(Lpc_Sample_Buffer buffer, Lpc_Encoder_Settings settings);
@@ -254,7 +294,7 @@ LPC_API void               lpc_tms5220_buffer_free(Lpc_TMS5220_Buffer *buffer);
 LPC_API Lpc_List           lpc_list_create(lpc_u64 init_size, lpc_u64 element_size);
 LPC_API void               lpc_list_destroy(Lpc_List *list);
 
-LPC_API void              *lpc_list_get(Lpc_List *list, lpc_u64 index);
+LPC_API void*              lpc_list_get(Lpc_List *list, lpc_u64 index);
 LPC_API lpc_b32            lpc_list_append(Lpc_List *list, void *data);
 
 
@@ -297,8 +337,8 @@ LPC_API lpc_b32            lpc_list_append(Lpc_List *list, void *data);
 #define LPC_BIT_FRAME_SIZE    50
 #define LPC_CHIRP_TABLE_SIZE  52
 
-// LATER_CHIRP, from python_wizard: https://github.com/ptwz/python_wizard
-static lpc_f32 chirp_table[LPC_CHIRP_TABLE_SIZE] = {
+/* LATER_CHIRP, from python_wizard: https://github.com/ptwz/python_wizard */
+LPC_API lpc_f32 chirp_table[LPC_CHIRP_TABLE_SIZE] = {
      0,   3,   15,  40,  76,  108, 113,  80,
      37,  38,  76,  68,  26,  50,  59,  19,
      55,  26,  37,  31,  29,  0,   0,   0,
@@ -308,21 +348,21 @@ static lpc_f32 chirp_table[LPC_CHIRP_TABLE_SIZE] = {
      0,   0,   0,   0,  
 };
 
-static lpc_f32 energy_table[LPC_ENERGY_MASK + 1] = {
+LPC_API lpc_f32 energy_table[LPC_ENERGY_MASK + 1] = {
        0,   52,   87,  123,
      174,  246,  348,  491,
      694,  981, 1385, 1957,
     2764, 3904, 5514, 7789
 };
 
-static lpc_u32 pitch_table[LPC_PITCH_MASK + 1] = { 
+LPC_API lpc_u32 pitch_table[LPC_PITCH_MASK + 1] = { 
     0,  15,  16,  17,  18,  19,  20,  21,  22,  23,  24,  25,  26,  27,  28,  29,
     30, 31,  32,  33,  34,  35,  36,  37,  38,  39,  40,  41,  42,  44,  46,  48,
     50, 52,  53,  56,  58,  60,  62,  65,  68,  70,  72,  76,  78,  80,  84,  86,
     91, 94,  98, 101, 105, 109, 114, 118, 122, 127, 132, 137, 142, 148, 153, 159,
 };
 
-static lpc_f32 k1_table[LPC_K1_K2_MASK + 1] = {
+LPC_API lpc_f32 k1_table[LPC_K1_K2_MASK + 1] = {
     -0.97850, -0.97270, -0.97070, -0.96680,
     -0.96290, -0.95900, -0.95310, -0.94140,
     -0.93360, -0.92580, -0.91600, -0.90620,
@@ -334,7 +374,7 @@ static lpc_f32 k1_table[LPC_K1_K2_MASK + 1] = {
      0.66013,  0.75054,  0.80416,  0.85350,
 };
 
-static lpc_f32 k2_table[LPC_K1_K2_MASK + 1] = {
+LPC_API lpc_f32 k2_table[LPC_K1_K2_MASK + 1] = {
     -0.64000, -0.58999, -0.53500, -0.47507,
     -0.41039, -0.34129, -0.26830, -0.19209,
     -0.11350, -0.03345,  0.04702,  0.12690,
@@ -346,60 +386,59 @@ static lpc_f32 k2_table[LPC_K1_K2_MASK + 1] = {
      0.90451,  0.91813,  0.92988,  0.98830
 };
 
-static lpc_f32 k3_table[LPC_K3_K4_K5_K6_K7_MASK + 1] = {
+LPC_API lpc_f32 k3_table[LPC_K3_K4_K5_K6_K7_MASK + 1] = {
     -0.86000, -0.75467, -0.64933, -0.54400,
     -0.43867, -0.33333, -0.22800, -0.12267,
     -0.01733,  0.08800,  0.19333,  0.29867,
      0.40400,  0.50933,  0.61467,  0.72000
 };
 
-static lpc_f32 k4_table[LPC_K3_K4_K5_K6_K7_MASK + 1] = {
+LPC_API lpc_f32 k4_table[LPC_K3_K4_K5_K6_K7_MASK + 1] = {
     -0.64000, -0.53145, -0.42289, -0.31434,
     -0.20579, -0.09723,  0.01132,  0.11987,
      0.22843,  0.33698,  0.44553,  0.55409,
      0.66264,  0.77119,  0.87975,  0.98830
 };
 
-static lpc_f32 k5_table[LPC_K3_K4_K5_K6_K7_MASK + 1] = {
+LPC_API lpc_f32 k5_table[LPC_K3_K4_K5_K6_K7_MASK + 1] = {
     -0.64000, -0.54933, -0.45867, -0.36800,
     -0.27733, -0.18667, -0.09600, -0.00533,
      0.08533,  0.17600,  0.26667,  0.35733,
      0.44800,  0.53867,  0.62933,  0.72000
 };
 
-static lpc_f32 k6_table[LPC_K3_K4_K5_K6_K7_MASK + 1] = {
+LPC_API lpc_f32 k6_table[LPC_K3_K4_K5_K6_K7_MASK + 1] = {
     -0.50000, -0.41333, -0.32667, -0.24000,
     -0.15333, -0.06667,  0.02000,  0.10667,
      0.19333,  0.28000,  0.36667,  0.45333,
      0.54000,  0.62667,  0.71333,  0.80000
 };
 
-static lpc_f32 k7_table[LPC_K3_K4_K5_K6_K7_MASK + 1] = {
+LPC_API lpc_f32 k7_table[LPC_K3_K4_K5_K6_K7_MASK + 1] = {
     -0.60000, -0.50667, -0.41333, -0.32000,
     -0.22667, -0.13333, -0.04000,  0.05333,
      0.14667,  0.24000,  0.33333,  0.42667,
      0.52000,  0.61333,  0.70667,  0.80000
 };
 
-static lpc_f32 k8_table[LPC_K8_K9_K10_MASK + 1]  = {
+LPC_API lpc_f32 k8_table[LPC_K8_K9_K10_MASK + 1]  = {
     -0.50000, -0.31429, -0.12857,  0.05714,
      0.24286,  0.42857,  0.61429,  0.80000
 };
 
-static lpc_f32 k9_table[LPC_K8_K9_K10_MASK + 1]  = {
+LPC_API lpc_f32 k9_table[LPC_K8_K9_K10_MASK + 1]  = {
     -0.50000, -0.34286, -0.18571, -0.02857,
      0.12857,  0.28571,  0.44286,  0.60000
 };
 
-static lpc_f32 k10_table[LPC_K8_K9_K10_MASK + 1] = {
+LPC_API lpc_f32 k10_table[LPC_K8_K9_K10_MASK + 1] = {
     -0.40000, -0.25714, -0.11429,  0.02857,
      0.17143,  0.31429,  0.45714,  0.60000
 };
 
-
-//
+/*
 // Filtering
-//
+*/
 
 LPC_API Lpc_Biquad_Filter biquad_bandpass_design(lpc_u32 sample_rate, lpc_f32 low_cut, lpc_f32 high_cut, lpc_f32 q_factor, lpc_b32 q_amplify) {
     lpc_f32 center, w, w_cos, w_sin, alpha;
@@ -441,7 +480,7 @@ LPC_API Lpc_Biquad_Filter biquad_bandpass_design(lpc_u32 sample_rate, lpc_f32 lo
     return filter;
 }
 
-LPC_API inline lpc_f32 biquad_process(Lpc_Biquad_Filter *filter, lpc_f32 input) {
+LPC_API LPC_INLINE lpc_f32 biquad_process(Lpc_Biquad_Filter *filter, lpc_f32 input) {
     lpc_f32 output;
 
     output = filter->b0 * input + filter->b1 * filter->x1 + filter->b2 * filter->x2
@@ -455,9 +494,9 @@ LPC_API inline lpc_f32 biquad_process(Lpc_Biquad_Filter *filter, lpc_f32 input) 
     return output;
 }
 
-// 
+/* 
 // Helpers
-//
+*/
 
 LPC_API lpc_f32 lpc_lerpf(lpc_f32 a, lpc_f32 b, lpc_f32 t) {
     return (1.0f - t) * a + b * t;
@@ -502,20 +541,20 @@ LPC_API Lpc_Code lpc_code_clamp(Lpc_Code code) {
 LPC_API lpc_bitcode lpc_convert_to_bitcode_internal(Lpc_Code bitcode) {
     lpc_bitcode output = 0;
 
-    output |= (((lpc_u64)bitcode.energy) & 0x0FLL) << LPC_ENERGY_OFFSET;
-    output |= (((lpc_u64)bitcode.repeat) & 0x01LL) << LPC_REP_OFFSET;
-    output |= (((lpc_u64)bitcode.pitch)  & 0x3FLL) << LPC_PITCH_OFFSET;
+    output |= (((lpc_u64)bitcode.energy) & LPC_ENERGY_MASK) << LPC_ENERGY_OFFSET;
+    output |= (((lpc_u64)bitcode.repeat) & LPC_REP_MASK)    << LPC_REP_OFFSET;
+    output |= (((lpc_u64)bitcode.pitch)  & LPC_PITCH_MASK)  << LPC_PITCH_OFFSET;
 
-    output |= (((lpc_u64)bitcode.k1)  & 0x1FLL) << LPC_K1_OFFSET;
-    output |= (((lpc_u64)bitcode.k2)  & 0x1FLL) << LPC_K2_OFFSET;
-    output |= (((lpc_u64)bitcode.k3)  & 0x0FLL) << LPC_K3_OFFSET;
-    output |= (((lpc_u64)bitcode.k4)  & 0x0FLL) << LPC_K4_OFFSET;
-    output |= (((lpc_u64)bitcode.k5)  & 0x0FLL) << LPC_K5_OFFSET;
-    output |= (((lpc_u64)bitcode.k6)  & 0x0FLL) << LPC_K6_OFFSET;
-    output |= (((lpc_u64)bitcode.k7)  & 0x0FLL) << LPC_K7_OFFSET;
-    output |= (((lpc_u64)bitcode.k8)  & 0x07LL) << LPC_K8_OFFSET;
-    output |= (((lpc_u64)bitcode.k9)  & 0x07LL) << LPC_K9_OFFSET;
-    output |= (((lpc_u64)bitcode.k10) & 0x07LL);
+    output |= (((lpc_u64)bitcode.k1)  & LPC_K1_K2_MASK)          << LPC_K1_OFFSET;
+    output |= (((lpc_u64)bitcode.k2)  & LPC_K1_K2_MASK)          << LPC_K2_OFFSET;
+    output |= (((lpc_u64)bitcode.k3)  & LPC_K3_K4_K5_K6_K7_MASK) << LPC_K3_OFFSET;
+    output |= (((lpc_u64)bitcode.k4)  & LPC_K3_K4_K5_K6_K7_MASK) << LPC_K4_OFFSET;
+    output |= (((lpc_u64)bitcode.k5)  & LPC_K3_K4_K5_K6_K7_MASK) << LPC_K5_OFFSET;
+    output |= (((lpc_u64)bitcode.k6)  & LPC_K3_K4_K5_K6_K7_MASK) << LPC_K6_OFFSET;
+    output |= (((lpc_u64)bitcode.k7)  & LPC_K3_K4_K5_K6_K7_MASK) << LPC_K7_OFFSET;
+    output |= (((lpc_u64)bitcode.k8)  & LPC_K8_K9_K10_MASK)      << LPC_K8_OFFSET;
+    output |= (((lpc_u64)bitcode.k9)  & LPC_K8_K9_K10_MASK)      << LPC_K9_OFFSET;
+    output |= (((lpc_u64)bitcode.k10) & LPC_K8_K9_K10_MASK);
 
     return output;
 }
@@ -524,41 +563,41 @@ LPC_API Lpc_Code lpc_convert_from_bitcode_internal(lpc_bitcode bitcode) {
     Lpc_Code output;
 
     memset(&output, 0, sizeof(output));
-    output.energy = ((lpc_u64)bitcode & (0x0FLL << LPC_ENERGY_OFFSET)) >> LPC_ENERGY_OFFSET;
+    output.energy = ((lpc_u64)bitcode & (LPC_ENERGY_MASK << LPC_ENERGY_OFFSET)) >> LPC_ENERGY_OFFSET;
 
     if (output.energy == LPC_ENERGY_ZERO || output.energy == LPC_ENERGY_STOP) {
         return output;
     }
 
-    output.repeat = ((lpc_u64)bitcode & (0x01LL << LPC_REP_OFFSET))    >> LPC_REP_OFFSET;
-    output.pitch  = ((lpc_u64)bitcode & (0x3FLL << LPC_PITCH_OFFSET))  >> LPC_PITCH_OFFSET;
+    output.repeat = ((lpc_u64)bitcode & (LPC_REP_MASK   << LPC_REP_OFFSET))    >> LPC_REP_OFFSET;
+    output.pitch  = ((lpc_u64)bitcode & (LPC_PITCH_MASK << LPC_PITCH_OFFSET))  >> LPC_PITCH_OFFSET;
 
     if (output.repeat) {
         return output;
     }
 
-    output.k1  = ((lpc_u64)bitcode & (0x1FLL << LPC_K1_OFFSET)) >> LPC_K1_OFFSET;
-    output.k2  = ((lpc_u64)bitcode & (0x1FLL << LPC_K2_OFFSET)) >> LPC_K2_OFFSET;
-    output.k3  = ((lpc_u64)bitcode & (0x0FLL << LPC_K3_OFFSET)) >> LPC_K3_OFFSET;
-    output.k4  = ((lpc_u64)bitcode & (0x0FLL << LPC_K4_OFFSET)) >> LPC_K4_OFFSET;
+    output.k1  = ((lpc_u64)bitcode & (LPC_K1_K2_MASK << LPC_K1_OFFSET)) >> LPC_K1_OFFSET;
+    output.k2  = ((lpc_u64)bitcode & (LPC_K1_K2_MASK << LPC_K2_OFFSET)) >> LPC_K2_OFFSET;
+    output.k3  = ((lpc_u64)bitcode & (LPC_K3_K4_K5_K6_K7_MASK << LPC_K3_OFFSET)) >> LPC_K3_OFFSET;
+    output.k4  = ((lpc_u64)bitcode & (LPC_K3_K4_K5_K6_K7_MASK << LPC_K4_OFFSET)) >> LPC_K4_OFFSET;
 
     if (!output.pitch) {
         return output;
     }
 
-    output.k5  = ((lpc_u64)bitcode & (0x0FLL << LPC_K5_OFFSET)) >> LPC_K5_OFFSET;
-    output.k6  = ((lpc_u64)bitcode & (0x0FLL << LPC_K6_OFFSET)) >> LPC_K6_OFFSET;
-    output.k7  = ((lpc_u64)bitcode & (0x0FLL << LPC_K7_OFFSET)) >> LPC_K7_OFFSET;
-    output.k8  = ((lpc_u64)bitcode & (0x07LL << LPC_K8_OFFSET)) >> LPC_K8_OFFSET;
-    output.k9  = ((lpc_u64)bitcode & (0x07LL << LPC_K9_OFFSET)) >> LPC_K9_OFFSET;
-    output.k10 = ((lpc_u64)bitcode & 0x07LL);
+    output.k5  = ((lpc_u64)bitcode & (LPC_K3_K4_K5_K6_K7_MASK << LPC_K5_OFFSET)) >> LPC_K5_OFFSET;
+    output.k6  = ((lpc_u64)bitcode & (LPC_K3_K4_K5_K6_K7_MASK << LPC_K6_OFFSET)) >> LPC_K6_OFFSET;
+    output.k7  = ((lpc_u64)bitcode & (LPC_K3_K4_K5_K6_K7_MASK << LPC_K7_OFFSET)) >> LPC_K7_OFFSET;
+    output.k8  = ((lpc_u64)bitcode & (LPC_K8_K9_K10_MASK << LPC_K8_OFFSET)) >> LPC_K8_OFFSET;
+    output.k9  = ((lpc_u64)bitcode & (LPC_K8_K9_K10_MASK << LPC_K9_OFFSET)) >> LPC_K9_OFFSET;
+    output.k10 = ((lpc_u64)bitcode &  LPC_K8_K9_K10_MASK);
 
     return output;
 }
 
-//
+/*
 // Encoding
-//
+*/
 
 LPC_API Lpc_Sample_Buffer lpc_buffer_prepare_internal(Lpc_Sample_Buffer buffer) {
     Lpc_Sample_Buffer converted;
@@ -574,7 +613,7 @@ LPC_API Lpc_Sample_Buffer lpc_buffer_prepare_internal(Lpc_Sample_Buffer buffer) 
     converted.frame_count = roundf((lpc_f32)buffer.frame_count / ((lpc_f32)buffer.sample_rate / (lpc_f32)LPC_SAMPLE_RATE));
     converted.samples     = (lpc_f32*)LPC_ALLOC((sizeof(lpc_f32) * converted.frame_count));
 
-    assert(converted.samples != NULL); // @todo, proper recovery if no memory
+    assert(converted.samples != NULL); /* @todo, proper recovery if no memory */
 
     for (i = 0; i < converted.frame_count; i++) {
         j = roundf((lpc_f32)i * ((lpc_f32)buffer.sample_rate / (lpc_f32)LPC_SAMPLE_RATE));
@@ -618,7 +657,7 @@ LPC_API Lpc_Sample_Buffer lpc_buffer_copy_internal(Lpc_Sample_Buffer buffer) {
     new_buffer = buffer;
     new_buffer.samples = (lpc_f32*)LPC_ALLOC((sizeof(lpc_f32) * buffer.frame_count));
     
-    assert(new_buffer.samples != NULL); // @todo, proper recovery
+    assert(new_buffer.samples != NULL); /* @todo, proper recovery */
     memcpy(new_buffer.samples, buffer.samples, sizeof(lpc_f32) * new_buffer.frame_count);
 
     return new_buffer;
@@ -659,9 +698,9 @@ LPC_API void lpc_buffer_filter_internal(Lpc_Sample_Buffer buffer, lpc_f32 low_cu
     }
 }
 
-// 
+/* 
 // Pre emphasis
-//
+*/
 
 LPC_API lpc_f32 lpc_buffer_energy_sqr_sum_internal(Lpc_Sample_Buffer buffer) {
     lpc_u64 i;
@@ -691,9 +730,9 @@ LPC_API void lpc_buffer_pre_emphasis(Lpc_Sample_Buffer buffer, lpc_f32 alpha) {
     }
 }
 
-// 
+/*
 // Segments
-//
+*/
 
 LPC_API Lpc_Segments lpc_get_segments_internal(Lpc_Sample_Buffer buffer, lpc_u32 segment_size, lpc_u32 num_segments) {
     lpc_u64 i;
@@ -702,7 +741,7 @@ LPC_API Lpc_Segments lpc_get_segments_internal(Lpc_Sample_Buffer buffer, lpc_u32
     segments.count = num_segments;
     segments.data  = (Lpc_Segment *)LPC_ALLOC(sizeof(Lpc_Segment) * num_segments);
 
-    assert(segments.data != NULL); // @todo, proper recovery from memory allocation errors
+    assert(segments.data != NULL); /* @todo, proper recovery from memory allocation errors */
     assert(buffer.frame_count < num_segments * segment_size);
 
     for (i = 0; i < num_segments; i++) {
@@ -728,22 +767,26 @@ LPC_API void lpc_pitch_estimate_internal(Lpc_Sample_Buffer buffer, Lpc_Segments 
     period_count = max_period - min_period;
     periods      = (lpc_f32 *)LPC_ALLOC(sizeof(lpc_f32) * period_count);
 
-    assert(periods != NULL); // @todo, proper recovery from memory allocation errors
+    assert(periods != NULL); /* @todo, proper recovery from memory allocation errors */
 
+    /*
     // we assume that first segment is maximum size, @todo, test for that,
     // as it should be always like that, except the garbage data
+    */
     
     segment_size     = segments.data[0].count;
     work_buffer_size = window_size * segment_size;
     work_buffer      = (lpc_f32 *)LPC_ALLOC(sizeof(lpc_f32) * work_buffer_size);
     window           = (lpc_f32 *)LPC_ALLOC(sizeof(lpc_f32) * work_buffer_size);
     
-    assert(work_buffer != NULL); // @todo, proper recovery from memory allocation errors
-    assert(window      != NULL); // @todo, proper recovery from memory allocation errors
+    assert(work_buffer != NULL); /* @todo, proper recovery from memory allocation errors */
+    assert(window      != NULL); /* @todo, proper recovery from memory allocation errors */
 
+    /*
     // @note apparently we need normalized coefficients in here, so we can get more accurate pitch correlation
     // it is made in python-wizard via calculating correlations coefficients for every lag value
     // but it works anyway?
+    */
 
     for (i = 0; i < work_buffer_size; i++) {
         window[i] = 0.54f - 0.46f * cosf(LPC_TAU * ((lpc_f32)i / (lpc_f32)(work_buffer_size - 1)));
@@ -765,7 +808,7 @@ LPC_API void lpc_pitch_estimate_internal(Lpc_Sample_Buffer buffer, Lpc_Segments 
             work_buffer[j] *= window[j];
         }
 
-        { // calculate best correlation factor
+        { /* calculate best correlation factor */
             for (j = 0; j < period_count; j++) {
                 periods[j] = 0;
 
@@ -821,7 +864,7 @@ LPC_API Lpc_Codes lpc_get_codes_from_segments_internal(Lpc_Segments segments) {
 
     for (i = 0; i < segments.count; i++) {
         code.energy = (lpc_u4)segments.data[i].table_energy;
-        code.repeat = 0; // python wizard doesnt support it, but we can @todo
+        code.repeat = 0; /* python wizard doesnt support it, but we can @todo */
         code.pitch  = (lpc_u6)segments.data[i].table_pitch;
 
         for (j = 0; j < 10; j++) {
@@ -865,7 +908,7 @@ LPC_API Lpc_Codes lpc_encode(Lpc_Sample_Buffer buffer, Lpc_Encoder_Settings sett
     for (i = 0; i < num_segments; i++) {
         memset(coeff, 0, sizeof(coeff));
 
-        // so we need to get the LPC coefficients, and this loop basically does it
+        /* so we need to get the LPC coefficients, and this loop basically does it */
         for (j = 0; j < 11; j++) {
             size = segment_size - j;
             sum = 0;
@@ -881,9 +924,9 @@ LPC_API Lpc_Codes lpc_encode(Lpc_Sample_Buffer buffer, Lpc_Encoder_Settings sett
             coeff[j] = sum;
         }
 
-        // here we convert the lpc coefficients to K reflection coeffs
+        /* here we convert the lpc coefficients to K reflection coeffs */
 
-        { // Leroux Guegen algorithm for finding K
+        { /* Leroux Guegen algorithm for finding K */
             lpc_f32 y, b_params[11], d_params[12];
 
             memset(k_params, 0, sizeof(k_params));
@@ -914,7 +957,7 @@ LPC_API Lpc_Codes lpc_encode(Lpc_Sample_Buffer buffer, Lpc_Encoder_Settings sett
                 segments.data[i].table_pitch = 0;
             }
 
-            { // setting RMS of signal
+            { /* setting RMS of signal */
                 lpc_f32 rms, dist, min_dist;
                 lpc_u64 min_dist_i;
 
@@ -941,12 +984,14 @@ LPC_API Lpc_Codes lpc_encode(Lpc_Sample_Buffer buffer, Lpc_Encoder_Settings sett
         }
 
         {
-            // and we set them so segment in here
+            /* and then we set the Ks to segments */
             lpc_f32 dist, min_dist;
             lpc_u64 min_dist_i;
             lpc_f32 *k_table = NULL;
 
+            /*
             // K1 K2
+            */
             for (j = 0; j < 2; j++) {
                 switch (j) {
                     case 0:  k_table = k1_table; break;
@@ -969,7 +1014,9 @@ LPC_API Lpc_Codes lpc_encode(Lpc_Sample_Buffer buffer, Lpc_Encoder_Settings sett
                 segments.data[i].table_k[j] = min_dist_i;
             }
 
+            /*
             // K3-K7
+            */
             for (j = 2; j < 7; j++) {
                 switch (j) {
                     case 2:  k_table = k3_table; break;
@@ -1030,17 +1077,17 @@ LPC_API Lpc_Codes lpc_encode(Lpc_Sample_Buffer buffer, Lpc_Encoder_Settings sett
     return codes;
 }
 
-//
+/*
 // Decoding
-//
+*/
 
 Lpc_Sample_Buffer lpc_decode(Lpc_Codes codes) {
-    Lpc_Synth previous, target, current;
-    Lpc_Code curr_code;
-    Lpc_Sample_Buffer buffer;
     lpc_u64 i = 0, j = 0, sample_counter = 0, phase_counter = 0, code_index = 0;
-    lpc_f32 forward[10], backward[10];
     lpc_f32 in, t, max = FLT_MIN, min = FLT_MAX;
+    Lpc_Synth previous, target, current;
+    Lpc_Sample_Buffer buffer;
+    Lpc_Code curr_code;
+    lpc_f32 forward[10], backward[10];
     lpc_u32 noise = 1;
     lpc_b32 repeat;
 
@@ -1244,7 +1291,7 @@ LPC_API Lpc_Bitcode_Info lpc_tms5220_decode_bits_internal(lpc_u1 *bits, lpc_u64 
 LPC_API void lpc_tms5220_squash_bits_internal(lpc_u8 *bytes, lpc_u64 bytes_count, lpc_u1 *bits, lpc_u64 bits_count) {
     lpc_u64 i, j = 0;
     
-    UNUSED(bytes_count);
+    LPC_UNUSED(bytes_count);
 
     assert((bytes_count * 8) == bits_count);
 
@@ -1261,7 +1308,7 @@ LPC_API void lpc_tms5220_unsquash_bits_internal(lpc_u1 *cont, lpc_u64 cont_count
     lpc_u64 i, j, k = 0;
     lpc_u1 bit;
 
-    UNUSED(cont_count);
+    LPC_UNUSED(cont_count);
 
     assert(cont_count == (from_count * 8));
     
@@ -1289,13 +1336,13 @@ LPC_API Lpc_TMS5220_Buffer lpc_tms5220_encode(Lpc_Codes codes) {
     buff.count = bits.count / 8;
 
     if (bits.count != (buff.count * 8)) {
-        // we need to shift last bits on amount of bits
+        /* we need to shift last bits on amount of bits */
         i = bits.count - buff.count * 8;
         bits.count -= i;
     }
 
     buff.bytes = (lpc_u8*)LPC_ALLOC(sizeof(lpc_u8) * buff.count);
-    assert(buff.bytes != NULL); // @todo, proper recovery from memory allocation errors
+    assert(buff.bytes != NULL); /* @todo, proper recovery from memory allocation errors */
     
     lpc_tms5220_squash_bits_internal(buff.bytes, buff.count, (lpc_u1*) bits.data, bits.count);
     lpc_list_destroy(&bits);
@@ -1313,7 +1360,7 @@ LPC_API Lpc_Codes lpc_tms5220_decode(Lpc_TMS5220_Buffer buffer) {
     codes = lpc_list_create(buffer.count * (LPC_BIT_FRAME_SIZE / 8), sizeof(Lpc_Code));
     bits  = (lpc_u1*)LPC_ALLOC(buffer.count * 8);
 
-    assert(bits != NULL); // @todo, proper recovery from memory allocation errors
+    assert(bits != NULL); /* @todo, proper recovery from memory allocation errors */
 
     lpc_tms5220_unsquash_bits_internal(bits, buffer.count * 8, (lpc_u8*)buffer.bytes, buffer.count);
 
@@ -1417,6 +1464,5 @@ LPC_API void lpc_tms5220_buffer_free(Lpc_TMS5220_Buffer *buffer) {
     memset(buffer, 0, sizeof(Lpc_TMS5220_Buffer));
 }
 
-
-#endif // LPC_ENC_DEC_IMPLEMENTATION
-#endif // LPC_ENC_DEC_H
+#endif /* LPC_ENC_DEC_IMPLEMENTATION */
+#endif /* LPC_ENC_DEC_H */
