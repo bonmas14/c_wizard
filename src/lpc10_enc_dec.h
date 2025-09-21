@@ -52,6 +52,7 @@
     CHANGELOG:
     v1.0 Init version.
     v1.1 Adding LPC_UNUSED and LPC_INLINE macro as I forget to add it, preprocessor typos and coments style.
+    v1.2 Deleted setting frame_size_ms, as tms5220 is always 25 ms, introduced LPC_FRAME_SIZE_MS.
 */
 
 #if !defined(LPC_ENC_DEC_H)
@@ -91,10 +92,11 @@ extern "C" {
 #define LPC_PI 3.14159265358979323846f
 #define LPC_TAU (LPC_PI * 2)
 
-#define LPC_SAMPLE_RATE 8000
-#define LPC_SAMPLES     200
-#define LPC_ENERGY_ZERO 0x0
-#define LPC_ENERGY_STOP 0xf
+#define LPC_SAMPLE_RATE   8000
+#define LPC_SAMPLES       200
+#define LPC_ENERGY_ZERO   0x0
+#define LPC_ENERGY_STOP   0xf
+#define LPC_FRAME_SIZE_MS 25
 
 #if !defined(LPC_ALLOC)
 #include <stdlib.h>
@@ -180,7 +182,6 @@ typedef struct {
     lpc_b32 do_pre_emphasis;
     lpc_f32 pre_emphasis_alpha;
     
-    lpc_u32 frame_size_ms;
     lpc_u32 window_size_in_segments;
 } Lpc_Encoder_Settings;
 
@@ -189,7 +190,7 @@ typedef struct {
     50.0f, 4000.0f, 1.0f,  \
     -0.1f, 2.0f,           \
     true, -0.9373,         \
-    25, 2                  \
+    2                      \
 }
 
 /* 
@@ -892,7 +893,7 @@ LPC_API Lpc_Codes lpc_encode(Lpc_Sample_Buffer buffer, Lpc_Encoder_Settings sett
     buffer       = lpc_buffer_prepare_internal(buffer);
     pitch_buffer = lpc_buffer_copy_internal(buffer);
 
-    lpc_u32 segment_size = buffer.sample_rate / 1000 * settings.frame_size_ms;
+    lpc_u32 segment_size = buffer.sample_rate / 1000 * LPC_FRAME_SIZE_MS;
     lpc_u32 num_segments = ceilf((lpc_f32)buffer.frame_count / (lpc_f32)segment_size);
 
     segments = lpc_get_segments_internal(buffer, segment_size, num_segments);

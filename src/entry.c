@@ -1,3 +1,10 @@
+#include "raylib.h"
+
+#define RAYMATH_IMPLEMENTATION
+#include "raymath.h"
+
+#define RAYGUI_IMPLEMENTATION
+#include "raygui.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -5,6 +12,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <float.h>
+#include <string.h>
 
 /// -------------
 
@@ -59,15 +67,11 @@ typedef uint32_t b32;
 #endif
 
 #ifndef ERRLOG
-#include <stdio.h>
-#define ERRLOG(...) fprintf(stderr, __VA_ARGS__)
+#define ERRLOG(...) TraceLog(LOG_ERROR, __VA_ARGS__)
 #endif
 #ifndef INFLOG
-#include <stdio.h>
-#define INFLOG(...) fprintf(stderr, __VA_ARGS__)
+#define INFLOG(...) TraceLog(LOG_INFO, __VA_ARGS__)
 #endif
-
-#include <string.h>
 
 #if DEBUG
 #   define assert(result) { \
@@ -84,16 +88,10 @@ typedef uint32_t b32;
 #define MEMCPY(dest, source, size) memcpy(dest, source, size)
 #define MEMCMP(a, b, size)         memcmp(a, b, size)
 
-#include "raylib.h"
-
 #define TAU (2.0 * PI)
 
-#define RAYMATH_IMPLEMENTATION
-#include "raymath.h"
-
-
-#define WINDOW_WIDTH  640
-#define WINDOW_HEIGHT 480 
+#define WINDOW_WIDTH  900
+#define WINDOW_HEIGHT 700 
 
 f32 window_width  = WINDOW_WIDTH;
 f32 window_height = WINDOW_HEIGHT;
